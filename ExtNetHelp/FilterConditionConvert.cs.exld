@@ -1,0 +1,568 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Data;
+using Ext.Net;
+using System.Collections;
+using NHibernateHelp.NHibernateCallback;
+using NHibernate.Type;
+
+namespace Extend.ExtNetHelp
+{
+    /// <summary>
+    /// 帮助由FilterCondition获得表达式
+    /// </summary>
+    public class FilterConditionConvert
+    {
+        #region 各个属性的默认值
+        /// <summary>
+        /// 默认的字符串连接用字符
+        /// </summary>
+        private static string defaultStrJoinSign = "+";
+        /// <summary>
+        /// 默认的字符串连接用字符
+        /// </summary>
+        public static string DefaultStrJoinSign
+        {
+            get { return FilterConditionConvert.defaultStrJoinSign; }
+            set { FilterConditionConvert.defaultStrJoinSign = value; }
+        }
+        /// <summary>
+        /// 参数名格式，对于Nhibernate为:{0}，对于不同种数据库可能不一样
+        /// </summary>
+        private static string defaultParamerNameFormat = ":{0}";
+        /// <summary>
+        /// 参数名格式，对于Nhibernate为:{0}，对于不同种数据库可能不一样
+        /// </summary>
+        public static string DefaultParamerNameFormat
+        {
+            get { return defaultParamerNameFormat; }
+            set { defaultParamerNameFormat = value; }
+        }
+        /// <summary>        
+        /// 默认的字符型字段表达式格式，主要是要加isnull
+        /// </summary>
+        private static string defaultStringFieldFormat = @" isnull({0},'') ";
+        /// <summary>
+        /// 默认的字符型字段表达式格式，主要是要加isnull
+        /// </summary>
+        public static string DefaultStringFieldFormat
+        {
+            get { return defaultStringFieldFormat; }
+            set { defaultStringFieldFormat = value; }
+        }
+        /// <summary>        
+        /// 如果，碰到字符串like的话，如何匹配
+        /// </summary>
+        private static string defaultLikeFormat = string.Format("'%' {0} {1} {0} '%'", DefaultStrJoinSign, DefaultStringFieldFormat);
+        /// <summary>
+        /// 如果，碰到字符串like的话，如何匹配
+        /// </summary>
+        public static string DefaultLikeFormat
+        {
+            get { return defaultLikeFormat; }
+            set { defaultLikeFormat = value; }
+        }
+        /// <summary>        
+        /// 默认的集合参数中参数名格式
+        /// </summary>
+        private static string defaultListSingleParamerNameFormat = @"{0}_{1}";
+        /// <summary>
+        /// 默认的集合参数中参数名格式
+        /// </summary>
+        public static string DefaultListSingleParamerNameFormat
+        {
+            get { return defaultListSingleParamerNameFormat; }
+            set { defaultListSingleParamerNameFormat = value; }
+        }
+        /// <summary>        
+        /// SQL中用的默认的集合参数中参数名格式
+        /// </summary>
+        private static string defaultListSingleParamerNameFormatPart = string.Format(DefaultParamerNameFormat, DefaultListSingleParamerNameFormat);
+        /// <summary>
+        /// SQL中用的默认的集合参数中参数名格式
+        /// </summary>
+        public static string DefaultListSingleParamerNameFormatPart
+        {
+            get { return defaultListSingleParamerNameFormatPart; }
+            set { defaultListSingleParamerNameFormatPart = value; }
+        }
+        /// <summary>
+        /// 默认的通过FilterType转换为Nhibernate用的IType的转换对照表
+        /// </summary>
+        private static IDictionary<FilterType, Type> defaultTypeHashTable = null;
+        /// <summary>
+        /// 默认的通过FilterType转换为Nhibernate用的IType的转换对照表
+        /// </summary>
+        public static IDictionary<FilterType, Type> DefaultTypeHashTable
+        {
+            get
+            {
+                if (defaultTypeHashTable == null)
+                {
+                    defaultTypeHashTable = new SortedList<FilterType, Type>();
+                    defaultTypeHashTable[FilterType.Boolean] = typeof(bool);
+                    defaultTypeHashTable[FilterType.Date] = typeof(DateTime);
+                    defaultTypeHashTable[FilterType.Numeric] = typeof(double);
+                    defaultTypeHashTable[FilterType.String] = typeof(string);
+                }
+                return defaultTypeHashTable;
+            }
+        }
+        /// <summary>
+        /// 默认的通过RecordFieldType转换为Type的转换对照表
+        /// </summary>
+        private static IDictionary<RecordFieldType, Type> defaultRecordFieldTypeHashTable = null;
+        /// <summary>
+        /// 默认的通过RecordFieldType转换为Type的转换对照表
+        /// </summary>
+        public static IDictionary<RecordFieldType, Type> DefaultRecordFieldTypeHashTable
+        {
+            get
+            {
+                if (defaultRecordFieldTypeHashTable == null)
+                {
+                    defaultRecordFieldTypeHashTable = new SortedList<RecordFieldType, Type>();
+                    defaultRecordFieldTypeHashTable[RecordFieldType.Boolean] = typeof(bool);
+                    defaultRecordFieldTypeHashTable[RecordFieldType.Date] = typeof(DateTime);
+                    defaultRecordFieldTypeHashTable[RecordFieldType.Float] = typeof(double);
+                    defaultRecordFieldTypeHashTable[RecordFieldType.Int] = typeof(int);
+                    defaultRecordFieldTypeHashTable[RecordFieldType.String] = typeof(string);
+                }
+                return defaultRecordFieldTypeHashTable;
+            }
+        }
+        #endregion
+
+        #region 各个属性值
+        /// <summary>
+        /// 字符串连接用字符
+        /// </summary>
+        private string strJoinSign = FilterConditionConvert.DefaultStrJoinSign;
+        /// <summary>
+        /// 字符串连接用字符
+        /// </summary>
+        public string StrJoinSign
+        {
+            get { return strJoinSign; }
+            set { strJoinSign = value; }
+        }
+        /// <summary>        
+        /// 参数名格式，对于Nhibernate为:{0}，对于不同种数据库可能不一样
+        /// </summary>
+        private string paramerNameFormat = FilterConditionConvert.DefaultParamerNameFormat;
+        /// <summary>
+        /// 参数名格式，对于Nhibernate为:{0}，对于不同种数据库可能不一样
+        /// </summary>
+        public string ParamerNameFormat
+        {
+            get { return paramerNameFormat; }
+            set { paramerNameFormat = value; }
+        }
+        /// <summary>        
+        /// 字符型字段表达式格式，主要是要加isnull
+        /// </summary>
+        private string stringFieldFormat = DefaultStringFieldFormat;
+        /// <summary>
+        /// 字符型字段表达式格式，主要是要加isnull
+        /// </summary>
+        public string StringFieldFormat
+        {
+            get { return stringFieldFormat; }
+            set { stringFieldFormat = value; }
+        }
+        /// <summary>        
+        /// 如果，碰到字符串like的话，如何匹配
+        /// </summary>
+        private string likeFormat = DefaultLikeFormat;
+        /// <summary>
+        /// 如果，碰到字符串like的话，如何匹配
+        /// </summary>
+        public string LikeFormat
+        {
+            get { return likeFormat; }
+            set { likeFormat = value; }
+        }
+        /// <summary>        
+        /// 集合参数中参数名格式
+        /// </summary>
+        private string listSingleParamerNameFormat = DefaultListSingleParamerNameFormat;
+        /// <summary>
+        /// 集合参数中参数名格式
+        /// </summary>
+        public string ListSingleParamerNameFormat
+        {
+            get { return listSingleParamerNameFormat; }
+            set { listSingleParamerNameFormat = value; }
+        }
+        /// <summary>        
+        /// SQL中的集合参数中参数名格式
+        /// </summary>
+        private string listSingleParamerNameFormatPart = DefaultListSingleParamerNameFormatPart;
+        /// <summary>
+        /// SQL中的集合参数中参数名格式
+        /// </summary>
+        public string ListSingleParamerNameFormatPart
+        {
+            get { return listSingleParamerNameFormatPart; }
+            set { listSingleParamerNameFormatPart = value; }
+        }
+        /// <summary>
+        /// 通过FilterType转换为Nhibernate用的IType的转换对照表
+        /// </summary>
+        private IDictionary<FilterType, Type> typeHashTable = DefaultTypeHashTable;
+        /// <summary>
+        /// 通过FilterType转换为Nhibernate用的IType的转换对照表
+        /// </summary>
+        public IDictionary<FilterType, Type> TypeHashTable
+        {
+            get
+            {
+                return typeHashTable;
+            }
+            set
+            {
+                typeHashTable = value;
+            }
+        }
+        /// <summary>
+        /// 通过RecordFieldType转换为Type的转换对照表
+        /// </summary>
+        private IDictionary<RecordFieldType, Type> recordFieldTypeHashTable = DefaultRecordFieldTypeHashTable;
+        /// <summary>
+        /// 通过RecordFieldType转换为Type的转换对照表
+        /// </summary>
+        public IDictionary<RecordFieldType, Type> RecordFieldTypeHashTable
+        {
+            get
+            {
+                return defaultRecordFieldTypeHashTable;
+            }
+            set
+            {
+                defaultRecordFieldTypeHashTable = value;
+            }
+        }
+        #endregion
+
+        #region 获取表达式部分
+        /// <summary>
+        /// 帮助由FilterCondition获得表达式
+        /// </summary>
+        /// <param name="conditions">由Ext.Net控件提供</param>
+        /// <param name="gridPanelFileldHashTable">数据列名和sql列名的对照表</param>
+        /// <returns></returns>
+        public string GetExpression(IEnumerable<FilterCondition> conditions, IDictionary<string, string> gridPanelFileldHashTable)
+        {
+            List<string> expressionList = this.GetExpressionList(conditions, gridPanelFileldHashTable);
+            return string.Join(" and ", expressionList.ToArray());
+        }
+        /// <summary>
+        /// 帮助由FilterCondition获得表达式
+        /// </summary>
+        /// <param name="conditions">由Ext.Net控件提供</param>
+        /// <param name="gridPanelFileldHashTable">数据列名和sql列名的对照表</param>
+        /// <returns></returns>
+        public List<string> GetExpressionList(IEnumerable<FilterCondition> conditions, IDictionary<string, string> gridPanelFileldHashTable)
+        {
+            List<string> expressionList = new List<string>();
+            foreach (FilterCondition condition in conditions)
+            {
+                string expression = string.Empty;
+                if (gridPanelFileldHashTable.ContainsKey(condition.Name))
+                {
+                    expression = this.GetExpression(condition, gridPanelFileldHashTable[condition.Name]);
+                }
+                else
+                {
+                    expression = this.GetExpression(condition, condition.Name);
+                }
+                expressionList.Add(expression);
+            }
+            return expressionList;
+        }
+        /// <summary>
+        /// 帮助由FilterCondition获得表达式
+        /// </summary>
+        /// <param name="condition">由Ext.Net控件提供</param>
+        /// <param name="tableName">表名或别名</param>
+        /// <param name="sqlFieldName">sql中的列名,带表名.，形式：表名.字段名</param>
+        /// <returns></returns>
+        public string GetExpression(FilterCondition condition, string sqlFieldName)
+        {
+            #region 左面部分
+            string leftPart = string.Format("{0}", sqlFieldName).Trim();
+            if (condition.FilterType == FilterType.String)
+            {
+                leftPart = string.Format(StringFieldFormat, sqlFieldName).Trim();
+            }
+            #endregion
+
+            #region 比较符
+            string sign = "=";
+            switch (condition.Comparison)
+            {
+                case Comparison.Eq:
+                    {
+                        switch (condition.FilterType)
+                        {
+                            case FilterType.List:
+                                {
+                                    sign = "in";
+                                    break;
+                                }
+                            case FilterType.String:
+                                {
+                                    sign = "like";
+                                    break;
+                                }
+                        }
+                        break;
+                    }
+                case Comparison.Gt:
+                    {
+                        sign = ">";
+                        break;
+                    }
+                case Comparison.Lt:
+                    {
+                        sign = "<";
+                        break;
+                    }
+            }
+            #endregion
+
+            #region 表达式右面部分
+            string rightPart = string.Empty;
+            switch (condition.FilterType)
+            {
+                case FilterType.Boolean:
+                case FilterType.Date:
+                case FilterType.Numeric:
+                    {
+                        rightPart = this.GetParamerNamePart(condition);
+                        break;
+                    }
+                case FilterType.String:
+                    {
+                        rightPart = string.Format(LikeFormat, this.GetParamerNamePart(condition));
+                        break;
+                    }
+                case FilterType.List:
+                    {
+                        List<string> paramerList = this.GetParamerNameListPart(condition);
+                        rightPart = string.Join(",", paramerList.ToArray());
+                        rightPart = string.Format("({0})", rightPart);
+                        break;
+                    }
+            }
+            #endregion
+
+            return string.Format("{0} {1} {2}", leftPart, sign, rightPart);
+        }
+        #endregion
+
+        #region 获取参数名部分
+        /// <summary>
+        /// 获取参数名用，通过FilterCondition获得参数名
+        /// </summary>
+        /// <param name="condition"></param>
+        /// <returns></returns>
+        protected string GetParamerName(FilterCondition condition)
+        {
+            return condition.Name;
+        }
+        /// <summary>
+        /// 语句用，通过FilterCondition获得参数名
+        /// </summary>
+        /// <param name="condition"></param>
+        /// <returns></returns>
+        protected string GetParamerNamePart(FilterCondition condition)
+        {
+            return string.Format(this.ParamerNameFormat, this.GetParamerName(condition));
+        }
+        /// <summary>
+        /// 获取参数名用，通过FilterCondition获得参数名集合，适合于condition.ValuesList
+        /// </summary>
+        /// <param name="condition"></param>
+        /// <returns></returns>
+        protected List<string> GetParamerNameList(FilterCondition condition)
+        {
+            List<string> paramerNameList = new List<string>();
+            for (int i = 0; i < condition.ValuesList.Count; i++)
+            {
+                string paramerName = string.Format(this.ListSingleParamerNameFormat, this.GetParamerName(condition), i);
+                paramerNameList.Add(paramerName);
+            }
+            return paramerNameList;
+        }
+        /// <summary>
+        /// 语句用，通过FilterCondition获得参数名集合，适合于condition.ValuesList
+        /// </summary>
+        /// <param name="condition"></param>
+        /// <returns></returns>
+        protected List<string> GetParamerNameListPart(FilterCondition condition)
+        {
+            List<string> paramerNameList = this.GetParamerNameList(condition);
+            List<string> paramerNamePartList = new List<string>();
+            for (int i = 0; i < paramerNameList.Count; i++)
+            {
+                string paramerName = paramerNameList[i];
+                string paramerNamePart = string.Format(this.ParamerNameFormat, paramerName);
+                paramerNamePartList.Add(paramerNamePart);
+            }
+            return paramerNamePartList;
+        }
+        #endregion
+
+        #region 可静态的方法
+        /// <summary>
+        /// 在grid中查找字段名为FieldName的数据字段
+        /// </summary>
+        /// <param name="grid"></param>
+        /// <param name="FieldName"></param>
+        /// <returns></returns>
+        public static RecordField FindField(GridPanel grid, string FieldName)
+        {
+            Store store = grid.GetStore();
+            RecordField field = null;
+            for (int i = 0; i < store.Reader.Count; i++)
+            {
+                DataReader reader = store.Reader[i];
+                for (int j = 0; j < reader.Fields.Count; j++)
+                {
+                    RecordField tempField = reader.Fields[j];
+                    if (string.Compare(tempField.Name, FieldName, true) == 0)
+                    {
+                        field = tempField;
+                        break;
+                    }
+                }
+                if (field != null)
+                {
+                    break;
+                }
+            }
+            return field;
+        }
+        #endregion
+
+        #region 获得参数集合用
+        /// <summary>
+        /// 从conditionList中提取参数集合
+        /// </summary>
+        /// <param name="conditionList"></param>
+        /// <param name="grid"></param>
+        /// <returns></returns>
+        public List<ParamerInfo> GetParamerInfoList(IEnumerable<FilterCondition> conditionList, GridPanel grid)
+        {
+            List<ParamerInfo> paramerList = new List<ParamerInfo>();
+            foreach (FilterCondition condition in conditionList)
+            {
+                if (condition.FilterType != FilterType.List)
+                {
+                    ParamerInfo paramerInfo = this.GetParamerInfo(condition, grid);
+                    paramerList.Add(paramerInfo);
+                }
+                else
+                {
+                    List<ParamerInfo> subParamerList = this.GetParamerInfoList(condition);
+                    paramerList.AddRange(subParamerList);
+                }
+            }
+            return paramerList;
+        }
+        /// <summary>
+        /// 当condition.FilterType != FilterType.List时，根据condition获得参数集合
+        /// </summary>
+        /// <param name="condition"></param>
+        /// <returns></returns>
+        public List<ParamerInfo> GetParamerInfoList(FilterCondition condition)
+        {
+            List<ParamerInfo> paramerList = new List<ParamerInfo>();
+            for (int i = 0; i < condition.ValuesList.Count; i++)
+            {
+                ParamerInfo paramerInfo = new ParamerInfo();
+                paramerInfo.ParamerValue = condition.ValuesList[i];
+                paramerInfo.ParamerName = string.Format(this.ListSingleParamerNameFormat, this.GetParamerName(condition), i);
+                paramerInfo.ParamerType = NHibernate.Type.TypeFactory.GetSerializableType(typeof(string));
+                paramerList.Add(paramerInfo);
+            }
+            return paramerList;
+        }
+        #endregion
+
+        #region 获得单个参数用
+        /// <summary>
+        /// 通过condition获得一个参数信息
+        /// </summary>
+        /// <param name="condition"></param>
+        /// <param name="grid"></param>
+        /// <returns></returns>
+        public ParamerInfo GetParamerInfo(FilterCondition condition, GridPanel grid)
+        {
+            ParamerInfo paramerInfo = new ParamerInfo();
+            paramerInfo.ParamerName = this.GetParamerName(condition);
+            paramerInfo.ParamerValue = this.GetParamerValue(condition, grid);
+            //查找condition.Name对应字段信息
+            RecordField fileld = FilterConditionConvert.FindField(grid, condition.Name);
+            //通过fileld.Type转换成Type typeObj
+            Type typeObj = RecordFieldTypeHashTable[fileld.Type];
+            //转换成NHibernate用的IType
+            paramerInfo.ParamerType = NHibernate.Type.TypeFactory.GetSerializableType(typeObj);
+            return paramerInfo;
+        }
+        #endregion
+
+        #region 获取单个参数值的部分
+        /// <summary>
+        /// 获取参数名用，通过FilterCondition获得参数名
+        /// </summary>
+        /// <param name="condition"></param>        
+        /// <param name="grid"></param>
+        /// <returns></returns>
+        protected object GetParamerValue(FilterCondition condition, GridPanel grid)
+        {
+            object value = null;
+            switch (condition.FilterType)
+            {
+                case FilterType.Boolean:
+                    {
+                        value = condition.ValueAsBoolean;
+                        break;
+                    }
+                case FilterType.Date:
+                    {
+                        value = condition.ValueAsDate;
+                        break;
+                    }
+                case FilterType.String:
+                    {
+                        value = condition.Value;
+                        break;
+                    }
+                //case FilterType.Numeric 已经限制了是数值类型
+                case FilterType.Numeric:
+                    {
+                        RecordField fileld = FilterConditionConvert.FindField(grid, condition.Name);
+                        switch (fileld.Type)
+                        {
+                            case RecordFieldType.Int:
+                                {
+                                    value = condition.ValueAsInt;
+                                    break;
+                                }
+                            case RecordFieldType.Float:
+                                {
+                                    value = condition.ValueAsDouble;
+                                    break;
+                                }
+                        }
+                        break;
+                    }
+            }
+            return value;
+        }
+        #endregion
+    }
+}
